@@ -1,0 +1,37 @@
+{
+  "name": "polykiengs",
+  "version": "1.0.0",
+  "description": "Polykiengs - Advanced Polymarket bot with Kelly Criterion, 14K+ wallet scanning, pattern detection, and high-probability trade copying",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "scan": "ts-node src/scripts/scan-wallets.ts",
+    "analyze": "ts-node src/scripts/analyze-markets.ts"
+  },
+  "keywords": ["polymarket", "trading", "kelly-criterion", "bot"],
+  "author": "Polykiengs",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "ethers": "^6.13.1",
+    "dotenv": "^16.4.5",
+    "better-sqlite3": "^11.1.2",
+    "winston": "^3.13.0",
+    "cron": "^3.1.7",
+    "p-limit": "^5.0.0",
+    "cli-progress": "^3.12.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@types/node": "^20.14.9",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/cron": "^2.4.0",
+    "@types/cli-progress": "^3.11.6",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
