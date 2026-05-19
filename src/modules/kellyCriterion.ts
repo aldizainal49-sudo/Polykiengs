@@ -65,8 +65,8 @@ export class KellyCriterion {
     // Confidence based on trader agreement and historical accuracy
     const confidence = this.calculateConfidence(estimatedProbability, sourceTraders);
 
-    if (confidence < config.minConfidence) {
-      return null;
+    if (confidence < 0.3) {
+      return null; // Relaxed from config.minConfidence (0.7) since we often have 1-2 traders
     }
 
     return {
