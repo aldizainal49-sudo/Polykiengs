@@ -31,7 +31,7 @@ export const config: BotConfig = {
   // Trading
   initialBankroll: parseFloat(process.env.INITIAL_BANKROLL || '15'),
   maxBetFraction: parseFloat(process.env.MAX_BET_FRACTION || '0.25'), // Quarter-Kelly for safety
-  minEdge: parseFloat(process.env.MIN_EDGE || '0.05'), // 5% minimum edge
+  minEdge: parseFloat(process.env.MIN_EDGE || '0.02'), // 2% minimum edge (aggressive)
   minConfidence: parseFloat(process.env.MIN_CONFIDENCE || '0.7'),
   maxConcurrentBets: parseInt(process.env.MAX_CONCURRENT_BETS || '5'),
   

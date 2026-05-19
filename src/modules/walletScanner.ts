@@ -56,8 +56,8 @@ export class WalletScanner {
     this.gammaUrl = config.gammaApiUrl;
     this.dataUrl = config.dataApiUrl;
     this.db = db;
-    // Concurrency limiter: 10 parallel requests (safe for Polymarket rate limits)
-    this.limit = createLimiter(10);
+    // Concurrency limiter: 50 parallel requests (aggressive scan for 14000+ wallets)
+    this.limit = createLimiter(50);
   }
 
   /**
@@ -101,7 +101,7 @@ export class WalletScanner {
 
   /**
    * Collect wallet addresses from Polymarket's active markets
-   * Sources: market order books, recent trades, leaderboards
+   * Aggressive scan: fetch ALL markets and ALL trades to reach 14000+ wallets
    */
   private async collectWalletAddresses(): Promise<string[]> {
     const walletSet = new Set<string>();
@@ -111,31 +111,24 @@ export class WalletScanner {
       const markets = await this.fetchActiveMarkets();
       logger.info(`  Found ${markets.length} active markets to scan`);
 
-      // Source 2: Fetch traders from each market in parallel
-      const batchSize = config.scanBatchSize;
-      for (let i = 0; i < markets.length; i += batchSize) {
-        const batch = markets.slice(i, i + batchSize);
-        const results = await Promise.allSettled(
-          batch.map(market => this.limit(() => this.fetchMarketTraders(market)))
-        );
-        
-        results.forEach(r => {
-          if (r.status === 'fulfilled') {
-            r.value.forEach((addr: string) => walletSet.add(addr));
-          }
-        });
+      // Source 2: Fetch ALL traders from ALL markets in parallel (no batching delay)
+      const results = await Promise.allSettled(
+        markets.map(market => this.limit(() => this.fetchMarketTraders(market)))
+      );
+      
+      results.forEach(r => {
+        if (r.status === 'fulfilled') {
+          r.value.forEach((addr: string) => walletSet.add(addr));
+        }
+      });
 
-        // Rate limit: pause between batches
-        await this.rateLimitDelay(i / batchSize);
-
-        // Progress update
-        if (walletSet.size >= config.maxWalletsToScan) break;
-        logger.info(`  Progress: ${walletSet.size} wallets collected...`);
-      }
+      logger.info(`  Progress: ${walletSet.size} wallets collected from trades`);
 
       // Source 3: Leaderboard wallets (known active traders)
       const leaderboardWallets = await this.fetchLeaderboardWallets();
       leaderboardWallets.forEach(addr => walletSet.add(addr));
+
+      logger.info(`  Total unique wallets: ${walletSet.size}`);
 
     } catch (error) {
       logger.error('Error collecting wallets:', error);
@@ -145,32 +138,22 @@ export class WalletScanner {
   }
 
   /**
-   * Batch analyze wallet profiles with high concurrency
+   * Batch analyze ALL wallet profiles with high concurrency (no delay)
    */
   private async batchAnalyzeWallets(wallets: string[]): Promise<WalletProfile[]> {
     const profiles: WalletProfile[] = [];
-    const batchSize = config.scanBatchSize;
+    
+    logger.info(`  Analyzing ${wallets.length} wallets in parallel...`);
 
-    for (let i = 0; i < wallets.length; i += batchSize) {
-      const batch = wallets.slice(i, i + batchSize);
-      const results = await Promise.allSettled(
-        batch.map(wallet => this.limit(() => this.analyzeWallet(wallet)))
-      );
+    const results = await Promise.allSettled(
+      wallets.map(wallet => this.limit(() => this.analyzeWallet(wallet)))
+    );
 
-      results.forEach(r => {
-        if (r.status === 'fulfilled' && r.value) {
-          profiles.push(r.value);
-        }
-      });
-
-      // Rate limit: pause between batches
-      await this.rateLimitDelay(i / batchSize);
-
-      // Log progress every 1000 wallets
-      if (profiles.length % 1000 < batchSize) {
-        logger.info(`  Analyzed: ${profiles.length}/${wallets.length} wallets`);
+    results.forEach(r => {
+      if (r.status === 'fulfilled' && r.value) {
+        profiles.push(r.value);
       }
-    }
+    });
 
     return profiles;
   }
@@ -493,8 +476,8 @@ export class WalletScanner {
       // Use Gamma API for market listing (CLOB API doesn't list markets)
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.gammaUrl}/markets`, {
-          params: { active: true, closed: false, limit: 100 },
-          timeout: 30000,
+          params: { active: true, closed: false, limit: 500 },
+          timeout: 60000,
         })
       );
       const markets = response.data || [];
