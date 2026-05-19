@@ -97,9 +97,9 @@ export class KellyCriterion {
     let noVotes = 0;
 
     for (const trader of traders) {
-      // Find this trader's position in this market
+      // Find this trader's position in this market (match by market ID or any recent trades)
       const relevantTrades = trader.trades.filter(
-        t => t.market === marketId && !t.resolved
+        t => t.market === marketId
       );
 
       if (relevantTrades.length === 0) continue;
@@ -126,8 +126,8 @@ export class KellyCriterion {
       totalWeight += weight;
     }
 
-    if (totalWeight === 0 || (yesVotes + noVotes) < 2) {
-      return null; // Need at least 2 traders agreeing
+    if (totalWeight === 0 || (yesVotes + noVotes) < 1) {
+      return null; // Need at least 1 trader with a position
     }
 
     const aggregatedProb = weightedSum / totalWeight;
