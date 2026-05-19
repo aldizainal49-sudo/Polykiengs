@@ -19,8 +19,8 @@ export class WalletScanner {
   constructor(db: Database) {
     this.apiUrl = config.polymarketApiUrl;
     this.db = db;
-    // Concurrency limiter: 50 parallel requests for speed
-    this.limit = pLimit(50);
+    // Concurrency limiter: 10 parallel requests (safe for Polymarket rate limits)
+    this.limit = pLimit(10);
   }
 
   /**
@@ -84,9 +84,12 @@ export class WalletScanner {
         
         results.forEach(r => {
           if (r.status === 'fulfilled') {
-            r.value.forEach(addr => walletSet.add(addr));
+            r.value.forEach((addr: string) => walletSet.add(addr));
           }
         });
+
+        // Rate limit: pause between batches
+        await this.rateLimitDelay(i / batchSize);
 
         // Progress update
         if (walletSet.size >= config.maxWalletsToScan) break;
@@ -122,6 +125,9 @@ export class WalletScanner {
           profiles.push(r.value);
         }
       });
+
+      // Rate limit: pause between batches
+      await this.rateLimitDelay(i / batchSize);
 
       // Log progress every 1000 wallets
       if (profiles.length % 1000 < batchSize) {
@@ -405,12 +411,55 @@ export class WalletScanner {
 
   // ---- API Methods ----
 
+  /**
+   * Retry with exponential backoff for rate-limited requests
+   */
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        const status = error.response?.status;
+        
+        // Don't retry on client errors (except 429 rate limit)
+        if (status && status >= 400 && status < 500 && status !== 429) {
+          throw error;
+        }
+        
+        if (attempt === maxRetries) throw error;
+        
+        // Exponential backoff: 1s, 2s, 4s, 8s...
+        const delay = baseDelay * Math.pow(2, attempt);
+        const jitter = Math.random() * 500; // Add jitter to prevent thundering herd
+        logger.debug(`  Retry ${attempt + 1}/${maxRetries} after ${delay}ms (status: ${status || 'timeout'})`);
+        await new Promise(resolve => setTimeout(resolve, delay + jitter));
+      }
+    }
+    throw new Error('Max retries exceeded');
+  }
+
+  /**
+   * Rate-limited delay between batches
+   */
+  private async rateLimitDelay(batchIndex: number): Promise<void> {
+    // Add 500ms delay every 5 batches to avoid rate limits
+    if (batchIndex > 0 && batchIndex % 5 === 0) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
   private async fetchActiveMarkets(): Promise<string[]> {
     try {
-      const response = await axios.get(`${this.apiUrl}/markets`, {
-        params: { limit: 500, active: true },
-        timeout: 30000,
-      });
+      const response = await this.retryWithBackoff(() =>
+        axios.get(`${this.apiUrl}/markets`, {
+          params: { limit: 500, active: true },
+          timeout: 30000,
+        })
+      );
       return response.data.map((m: any) => m.condition_id || m.id);
     } catch (error) {
       logger.warn('Failed to fetch markets, using cached data');
@@ -420,10 +469,12 @@ export class WalletScanner {
 
   private async fetchMarketTraders(marketId: string): Promise<string[]> {
     try {
-      const response = await axios.get(`${this.apiUrl}/trades`, {
-        params: { market: marketId, limit: 500 },
-        timeout: 15000,
-      });
+      const response = await this.retryWithBackoff(() =>
+        axios.get(`${this.apiUrl}/trades`, {
+          params: { market: marketId, limit: 500 },
+          timeout: 15000,
+        })
+      );
       return response.data.map((t: any) => t.maker || t.taker).filter(Boolean);
     } catch {
       return [];
@@ -432,10 +483,12 @@ export class WalletScanner {
 
   private async fetchLeaderboardWallets(): Promise<string[]> {
     try {
-      const response = await axios.get(`${this.apiUrl}/leaderboard`, {
-        params: { limit: 1000 },
-        timeout: 15000,
-      });
+      const response = await this.retryWithBackoff(() =>
+        axios.get(`${this.apiUrl}/rewards/leaderboard`, {
+          params: { limit: 1000 },
+          timeout: 15000,
+        })
+      );
       return response.data.map((l: any) => l.address || l.wallet).filter(Boolean);
     } catch {
       return [];
@@ -444,10 +497,12 @@ export class WalletScanner {
 
   private async fetchWalletTrades(address: string): Promise<TradeRecord[]> {
     try {
-      const response = await axios.get(`${this.apiUrl}/trades`, {
-        params: { maker: address, limit: 200 },
-        timeout: 15000,
-      });
+      const response = await this.retryWithBackoff(() =>
+        axios.get(`${this.apiUrl}/trades`, {
+          params: { maker: address, limit: 200 },
+          timeout: 15000,
+        })
+      );
       return response.data.map((t: any) => ({
         id: t.id || `${address}-${t.timestamp}`,
         wallet: address,

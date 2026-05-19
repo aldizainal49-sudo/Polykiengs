@@ -113,12 +113,14 @@ export class KellyCriterion {
       if (latestTrade.side === 'YES') {
         yesVotes++;
         // Their implied probability = price they paid (adjusted for their edge)
-        const impliedProb = latestTrade.price + (trader.wallet.winRate - 0.5) * 0.3;
+        const impliedProb = Math.min(0.99, latestTrade.price + (trader.wallet.winRate - 0.5) * 0.3);
         weightedSum += impliedProb * weight;
       } else {
         noVotes++;
-        const impliedProb = (1 - latestTrade.price) + (trader.wallet.winRate - 0.5) * 0.3;
-        weightedSum += (1 - impliedProb) * weight;
+        // NO side: trader believes YES probability is LOW
+        // They paid (1 - price) for the NO token, implying YES prob = 1 - what they paid adjusted
+        const impliedYesProb = Math.max(0.01, latestTrade.price - (trader.wallet.winRate - 0.5) * 0.3);
+        weightedSum += impliedYesProb * weight;
       }
       
       totalWeight += weight;

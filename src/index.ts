@@ -68,6 +68,13 @@ class Polykiengs {
     logger.info(`📈 Total profit: $${this.state.totalProfit.toFixed(2)}`);
     logger.info('');
 
+    // Initialize trade copier (API keys + USDC approval)
+    const initialized = await this.copier.initialize();
+    if (!initialized) {
+      logger.error('❌ Trade copier initialization failed. Check API credentials.');
+      process.exit(1);
+    }
+
     // Phase 1: Initial wallet scan
     await this.runWalletScan();
 
@@ -127,8 +134,14 @@ class Polykiengs {
    * Main trading loop - runs continuously
    */
   private startTradingLoop(): void {
-    // Immediate first analysis
-    this.tradingCycle();
+    // Immediate first analysis (with await via IIFE)
+    (async () => {
+      try {
+        await this.tradingCycle();
+      } catch (error) {
+        logger.error('First trading cycle error:', error);
+      }
+    })();
 
     // Then run every scan interval
     this.cycleInterval = setInterval(async () => {
@@ -235,15 +248,21 @@ class Polykiengs {
 
   /**
    * Check and resolve active bets
+   * Uses actual market resolution data from Polymarket API
    */
   private async checkActiveBets(): Promise<void> {
     if (this.state.activeBets.length === 0) return;
 
-    const { resolved, stillActive } = await this.copier.checkActiveBets(this.state.activeBets);
+    const { resolved, stillActive, resolutionData } = await this.copier.checkActiveBets(this.state.activeBets);
     
     for (const bet of resolved) {
-      // Determine win/loss (simplified - would check actual resolution)
-      const won = Math.random() > 0.4; // Placeholder until real resolution check
+      // Determine win/loss from ACTUAL market resolution
+      const resolution = resolutionData.get(bet.id);
+      if (!resolution) continue;
+
+      const won = (bet.side === 'YES' && resolution.winningOutcome === 'Yes') ||
+                  (bet.side === 'NO' && resolution.winningOutcome === 'No');
+      
       const profit = won ? bet.amount * (1 / bet.entryPrice - 1) : -bet.amount;
 
       // Update state
@@ -273,7 +292,8 @@ class Polykiengs {
 
       logger.info(
         `  ${won ? '✅ WIN' : '❌ LOSS'} | Market: ${bet.market.slice(0, 15)}... | ` +
-        `P/L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`
+        `P/L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} | ` +
+        `Resolution: ${resolution.winningOutcome}`
       );
     }
 
