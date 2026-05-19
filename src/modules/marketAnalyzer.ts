@@ -64,8 +64,8 @@ export class MarketAnalyzer {
   }
 
   /**
-   * Find markets where multiple top traders converge
-   * Convergence = multiple skilled traders betting the same direction
+   * Find markets where top traders have recent activity
+   * Relaxed: even 1 trader with high conviction is enough
    */
   private findTraderConvergence(
     topTraders: TopTrader[],
@@ -73,10 +73,14 @@ export class MarketAnalyzer {
   ): { market: MarketData; traders: TopTrader[]; recentTrades: TradeRecord[] }[] {
     const marketTraderMap = new Map<string, { traders: TopTrader[]; trades: TradeRecord[] }>();
 
+    // Build a set of market IDs for quick lookup
+    const marketIds = new Set(markets.map(m => m.id));
+    const marketBySlug = new Map(markets.map(m => [m.slug, m]));
+
     for (const trader of topTraders) {
-      // Get recent trades (last 48 hours)
-      const recentCutoff = Date.now() - (48 * 60 * 60 * 1000);
-      const recentTrades = trader.trades.filter(t => t.timestamp > recentCutoff && !t.resolved);
+      // Get recent trades (last 7 days - relaxed from 48h)
+      const recentCutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const recentTrades = trader.trades.filter(t => t.timestamp > recentCutoff);
 
       for (const trade of recentTrades) {
         const existing = marketTraderMap.get(trade.market) || { traders: [], trades: [] };
@@ -88,27 +92,39 @@ export class MarketAnalyzer {
       }
     }
 
-    // Only return markets with 2+ traders converging
+    // Return markets with 1+ traders (relaxed from 2+)
     const convergent: { market: MarketData; traders: TopTrader[]; recentTrades: TradeRecord[] }[] = [];
     
     for (const [marketId, { traders, trades }] of marketTraderMap) {
-      if (traders.length < 2) continue;
+      // Try to match market by ID or by slug
+      let market = markets.find(m => m.id === marketId);
+      if (!market) {
+        // Try matching by slug from trades
+        const slug = trades[0]?.marketSlug;
+        if (slug) market = marketBySlug.get(slug);
+      }
 
-      // Check if they're betting the same direction
-      const yesTrades = trades.filter(t => t.side === 'YES').length;
-      const noTrades = trades.filter(t => t.side === 'NO').length;
-      const agreement = Math.max(yesTrades, noTrades) / trades.length;
-
-      if (agreement >= 0.6) { // At least 60% directional agreement
-        const market = markets.find(m => m.id === marketId);
-        if (market) {
+      if (market) {
+        // For single trader: require high volume (3+ trades)
+        // For multiple traders: any agreement level is fine
+        if (traders.length >= 2) {
+          const yesTrades = trades.filter(t => t.side === 'YES').length;
+          const noTrades = trades.filter(t => t.side === 'NO').length;
+          const agreement = Math.max(yesTrades, noTrades) / trades.length;
+          if (agreement >= 0.6) {
+            convergent.push({ market, traders, recentTrades: trades });
+          }
+        } else if (trades.length >= 3) {
+          // Single high-conviction trader with multiple bets
           convergent.push({ market, traders, recentTrades: trades });
         }
       }
     }
 
-    // Sort by number of agreeing traders (more = higher conviction)
-    return convergent.sort((a, b) => b.traders.length - a.traders.length);
+    // Sort by number of traders, then by number of trades
+    return convergent.sort((a, b) => 
+      b.traders.length - a.traders.length || b.recentTrades.length - a.recentTrades.length
+    );
   }
 
   /**
@@ -129,7 +145,7 @@ export class MarketAnalyzer {
 
     // Cross-reference with market fundamentals
     const fundamentalScore = this.scoreFundamentals(market);
-    if (fundamentalScore < 0.5) return null; // Skip low-quality markets
+    if (fundamentalScore < 0.2) return null; // Only skip very low-quality markets
 
     // Adjust probability by market quality
     const adjustedProb = signal.probability * 0.8 + fundamentalScore * 0.2;
