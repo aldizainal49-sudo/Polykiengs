@@ -70,21 +70,33 @@ export class TradeCopier {
   }
 
   /**
-   * Initialize: derive API credentials and approve USDC
+   * Initialize: load API credentials and approve USDC
    * Must be called once before trading
    */
   async initialize(): Promise<boolean> {
     try {
-      // Step 1: Derive API key from wallet signature (EIP-712)
-      const apiCreds = await this.deriveApiKey();
-      if (!apiCreds) {
-        logger.error('❌ Failed to derive API key');
-        return false;
+      // Step 1: Load API credentials from config (manual) or derive
+      if (config.polyApiKey && config.polyApiSecret && config.polyPassphrase) {
+        // Use manually provided credentials
+        this.apiKey = config.polyApiKey;
+        this.apiSecret = config.polyApiSecret;
+        this.apiPassphrase = config.polyPassphrase;
+        logger.info('🔑 API credentials loaded from .env');
+      } else {
+        // Try to derive API key from wallet signature (EIP-712)
+        const apiCreds = await this.deriveApiKey();
+        if (!apiCreds) {
+          logger.error('❌ No API credentials in .env and auto-derivation failed');
+          logger.error('   Please add POLY_API_KEY, POLY_API_SECRET, POLY_PASSPHRASE to .env');
+          logger.error('   Generate them using: pip install py-clob-client');
+          logger.error('   python3 -c "from py_clob_client.client import ClobClient; c = ClobClient(\'https://clob.polymarket.com\', key=\'YOUR_KEY\', chain_id=137); print(c.derive_api_key())"');
+          return false;
+        }
+        this.apiKey = apiCreds.apiKey;
+        this.apiSecret = apiCreds.secret;
+        this.apiPassphrase = apiCreds.passphrase;
+        logger.info('🔑 API credentials derived from wallet signature');
       }
-      this.apiKey = apiCreds.apiKey;
-      this.apiSecret = apiCreds.secret;
-      this.apiPassphrase = apiCreds.passphrase;
-      logger.info('🔑 API credentials derived successfully');
 
       // Step 2: Ensure USDC approval for CTF Exchange
       await this.ensureUSDCApproval();

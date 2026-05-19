@@ -82,6 +82,11 @@ export interface BotConfig {
   privateKey: string;
   proxyWallet: string;
   
+  // API Credentials (manual)
+  polyApiKey: string;
+  polyApiSecret: string;
+  polyPassphrase: string;
+  
   // Scanning
   maxWalletsToScan: number;
   scanBatchSize: number;

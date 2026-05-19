@@ -16,6 +16,11 @@ export const config: BotConfig = {
   privateKey: process.env.PRIVATE_KEY || '',
   proxyWallet: process.env.PROXY_WALLET || '',
   
+  // API Credentials (manual - from py-clob-client or Polymarket UI)
+  polyApiKey: process.env.POLY_API_KEY || '',
+  polyApiSecret: process.env.POLY_API_SECRET || '',
+  polyPassphrase: process.env.POLY_PASSPHRASE || '',
+  
   // Scanning - 14,000+ wallets
   maxWalletsToScan: parseInt(process.env.MAX_WALLETS || '14000'),
   scanBatchSize: parseInt(process.env.SCAN_BATCH_SIZE || '100'),
