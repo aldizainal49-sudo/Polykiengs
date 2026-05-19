@@ -45,12 +45,14 @@ function createLimiter(concurrency: number) {
 
 export class WalletScanner {
   private apiUrl: string;
+  private gammaUrl: string;
   private db: Database;
   private limit: <T>(fn: () => Promise<T>) => Promise<T>;
   private scannedWallets: Map<string, WalletProfile> = new Map();
 
   constructor(db: Database) {
     this.apiUrl = config.polymarketApiUrl;
+    this.gammaUrl = config.gammaApiUrl;
     this.db = db;
     // Concurrency limiter: 10 parallel requests (safe for Polymarket rate limits)
     this.limit = createLimiter(10);
@@ -485,15 +487,20 @@ export class WalletScanner {
 
   private async fetchActiveMarkets(): Promise<string[]> {
     try {
+      // Use Gamma API for market listing (CLOB API doesn't list markets)
       const response = await this.retryWithBackoff(() =>
-        axios.get(`${this.apiUrl}/markets`, {
-          params: { limit: 500, active: true },
+        axios.get(`${this.gammaUrl}/markets`, {
+          params: { active: true, closed: false, limit: 100 },
           timeout: 30000,
         })
       );
-      return response.data.map((m: any) => m.condition_id || m.id);
+      const markets = response.data || [];
+      // Extract condition_id (token IDs) for trading via CLOB
+      return markets
+        .map((m: any) => m.condition_id || m.clobTokenIds?.[0] || m.id)
+        .filter(Boolean);
     } catch (error) {
-      logger.warn('Failed to fetch markets, using cached data');
+      logger.warn('Failed to fetch markets from Gamma API, using cached data');
       return this.db.getCachedMarketIds();
     }
   }
@@ -514,13 +521,19 @@ export class WalletScanner {
 
   private async fetchLeaderboardWallets(): Promise<string[]> {
     try {
+      // Gamma API for leaderboard/top traders
       const response = await this.retryWithBackoff(() =>
-        axios.get(`${this.apiUrl}/rewards/leaderboard`, {
-          params: { limit: 1000 },
+        axios.get(`${this.gammaUrl}/markets`, {
+          params: { active: true, closed: false, limit: 50, order: 'volume', ascending: false },
           timeout: 15000,
         })
       );
-      return response.data.map((l: any) => l.address || l.wallet).filter(Boolean);
+      // Extract unique traders from high-volume markets
+      const wallets: string[] = [];
+      for (const market of response.data || []) {
+        if (market.maker_address) wallets.push(market.maker_address);
+      }
+      return wallets;
     } catch {
       return [];
     }

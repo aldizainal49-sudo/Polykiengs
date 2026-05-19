@@ -10,7 +10,8 @@ dotenv.config();
 export const config: BotConfig = {
   // API Endpoints
   polymarketApiUrl: process.env.POLYMARKET_API_URL || 'https://clob.polymarket.com',
-  polygonRpcUrl: process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com',
+  gammaApiUrl: process.env.GAMMA_API_URL || 'https://gamma-api.polymarket.com',
+  polygonRpcUrl: process.env.POLYGON_RPC_URL || 'https://rpc.ankr.com/polygon',
   
   // Wallet
   privateKey: process.env.PRIVATE_KEY || '',

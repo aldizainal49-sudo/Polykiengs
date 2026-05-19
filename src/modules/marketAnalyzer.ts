@@ -13,12 +13,14 @@ import { Database } from '../utils/database';
 
 export class MarketAnalyzer {
   private apiUrl: string;
+  private gammaUrl: string;
   private kelly: KellyCriterion;
   private db: Database;
   private marketsCache: Map<string, MarketData> = new Map();
 
   constructor(kelly: KellyCriterion, db: Database) {
     this.apiUrl = config.polymarketApiUrl;
+    this.gammaUrl = config.gammaApiUrl;
     this.kelly = kelly;
     this.db = db;
   }
@@ -255,26 +257,26 @@ export class MarketAnalyzer {
   }
 
   /**
-   * Fetch all active markets from Polymarket API
+   * Fetch all active markets from Polymarket Gamma API
    */
   private async fetchActiveMarkets(): Promise<MarketData[]> {
     try {
-      const response = await axios.get(`${this.apiUrl}/markets`, {
-        params: { limit: 200, active: true },
+      const response = await axios.get(`${this.gammaUrl}/markets`, {
+        params: { active: true, closed: false, limit: 100 },
         timeout: 30000,
       });
 
-      return response.data.map((m: any) => ({
-        id: m.condition_id || m.id,
-        slug: m.slug || '',
+      return (response.data || []).map((m: any) => ({
+        id: m.condition_id || m.clobTokenIds?.[0] || m.id,
+        slug: m.slug || m.market_slug || '',
         question: m.question || '',
-        outcomes: m.outcomes || ['Yes', 'No'],
-        outcomePrices: (m.outcomePrices || ['0.5', '0.5']).map(Number),
-        volume: parseFloat(m.volume || '0'),
-        liquidity: parseFloat(m.liquidity || '0'),
-        endDate: m.end_date_iso || m.endDate || '',
-        active: true,
-        category: m.category || 'general',
+        outcomes: m.outcomes ? JSON.parse(m.outcomes) : ['Yes', 'No'],
+        outcomePrices: m.outcomePrices ? JSON.parse(m.outcomePrices) : [0.5, 0.5],
+        volume: parseFloat(m.volume || m.volumeNum || '0'),
+        liquidity: parseFloat(m.liquidity || m.liquidityNum || '0'),
+        endDate: m.end_date_iso || m.endDate || m.end_date || '',
+        active: m.active !== false,
+        category: m.category || m.group_slug || 'general',
       }));
     } catch (error) {
       logger.error('Failed to fetch markets:', error);

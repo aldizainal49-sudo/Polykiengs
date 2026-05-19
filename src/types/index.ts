@@ -76,6 +76,7 @@ export interface KellyBet {
 export interface BotConfig {
   // API
   polymarketApiUrl: string;
+  gammaApiUrl: string;
   polygonRpcUrl: string;
   
   // Wallet
