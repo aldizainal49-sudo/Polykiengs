@@ -77,6 +77,7 @@ export interface BotConfig {
   // API
   polymarketApiUrl: string;
   gammaApiUrl: string;
+  dataApiUrl: string;
   polygonRpcUrl: string;
   
   // Wallet

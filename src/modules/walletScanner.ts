@@ -46,6 +46,7 @@ function createLimiter(concurrency: number) {
 export class WalletScanner {
   private apiUrl: string;
   private gammaUrl: string;
+  private dataUrl: string;
   private db: Database;
   private limit: <T>(fn: () => Promise<T>) => Promise<T>;
   private scannedWallets: Map<string, WalletProfile> = new Map();
@@ -53,6 +54,7 @@ export class WalletScanner {
   constructor(db: Database) {
     this.apiUrl = config.polymarketApiUrl;
     this.gammaUrl = config.gammaApiUrl;
+    this.dataUrl = config.dataApiUrl;
     this.db = db;
     // Concurrency limiter: 10 parallel requests (safe for Polymarket rate limits)
     this.limit = createLimiter(10);
@@ -525,15 +527,15 @@ export class WalletScanner {
 
   private async fetchMarketTraders(tokenId: string): Promise<string[]> {
     try {
-      // CLOB API uses asset_id (token_id) to query trades
+      // Use public data-api for trades (no auth required)
       const response = await this.retryWithBackoff(() =>
-        axios.get(`${this.apiUrl}/trades`, {
+        axios.get(`${this.dataUrl}/trades`, {
           params: { asset_id: tokenId, limit: 100 },
           timeout: 15000,
         })
       );
       const trades = response.data || [];
-      return trades.map((t: any) => t.maker_address || t.maker || t.taker).filter(Boolean);
+      return trades.map((t: any) => t.proxyWallet || t.maker_address || t.maker).filter(Boolean);
     } catch {
       return [];
     }
@@ -561,23 +563,24 @@ export class WalletScanner {
 
   private async fetchWalletTrades(address: string): Promise<TradeRecord[]> {
     try {
+      // Use public data-api for wallet trades (no auth required)
       const response = await this.retryWithBackoff(() =>
-        axios.get(`${this.apiUrl}/trades`, {
-          params: { maker_address: address, limit: 200 },
+        axios.get(`${this.dataUrl}/trades`, {
+          params: { proxyWallet: address, limit: 200 },
           timeout: 15000,
         })
       );
       const data = response.data || [];
       return data.map((t: any) => ({
-        id: t.id || `${address}-${t.match_time || t.timestamp}`,
+        id: t.transactionHash || `${address}-${t.timestamp}`,
         wallet: address,
-        market: t.asset_id || t.market || t.condition_id || '',
-        marketSlug: t.market_slug || '',
-        outcome: t.outcome || t.side || '',
+        market: t.asset || t.conditionId || '',
+        marketSlug: t.slug || '',
+        outcome: t.outcome || '',
         side: t.side === 'BUY' ? 'YES' : 'NO',
-        amount: parseFloat(t.size || t.amount || '0'),
+        amount: parseFloat(t.size || '0'),
         price: parseFloat(t.price || '0.5'),
-        timestamp: t.match_time ? new Date(t.match_time).getTime() : (t.timestamp ? new Date(t.timestamp).getTime() : Date.now()),
+        timestamp: typeof t.timestamp === 'number' ? t.timestamp * 1000 : new Date(t.timestamp).getTime(),
         resolved: false,
         won: null,
       }));

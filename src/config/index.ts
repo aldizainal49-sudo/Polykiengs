@@ -11,6 +11,7 @@ export const config: BotConfig = {
   // API Endpoints
   polymarketApiUrl: process.env.POLYMARKET_API_URL || 'https://clob.polymarket.com',
   gammaApiUrl: process.env.GAMMA_API_URL || 'https://gamma-api.polymarket.com',
+  dataApiUrl: process.env.DATA_API_URL || 'https://data-api.polymarket.com',
   polygonRpcUrl: process.env.POLYGON_RPC_URL || 'https://rpc.ankr.com/polygon',
   
   // Wallet
