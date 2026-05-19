@@ -290,8 +290,8 @@ export class WalletScanner {
     const se = Math.sqrt((expected * (1 - expected)) / n);
     const zScore = (observed - expected) / se;
     
-    // Require z-score > 2.33 (99% confidence) for skill determination
-    const isStatisticallySignificant = zScore > 2.33;
+    // Require z-score > 1.65 (90% confidence) - relaxed for limited data
+    const isStatisticallySignificant = zScore > 1.65;
     
     // Additional checks:
     // 1. Consistency across time periods
@@ -305,9 +305,9 @@ export class WalletScanner {
     trades.filter(t => t.won).forEach(t => {
       marketWins.set(t.market, (marketWins.get(t.market) || 0) + 1);
     });
-    const isDiverse = marketWins.size >= 3;
+    const isDiverse = marketWins.size >= 2;
 
-    return isStatisticallySignificant && isConsistentAcrossTime && isDiverse;
+    return isStatisticallySignificant && (isConsistentAcrossTime || isDiverse);
   }
 
   /**
@@ -528,11 +528,11 @@ export class WalletScanner {
 
   private async fetchMarketTraders(tokenId: string): Promise<string[]> {
     try {
-      // Use public data-api for trades (no auth required)
+      // Use public data-api for trades (no auth required) - high limit for more wallets
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.dataUrl}/trades`, {
-          params: { asset_id: tokenId, limit: 100 },
-          timeout: 15000,
+          params: { asset_id: tokenId, limit: 1000 },
+          timeout: 30000,
         })
       );
       const trades = response.data || [];
@@ -564,11 +564,11 @@ export class WalletScanner {
 
   private async fetchWalletTrades(address: string): Promise<TradeRecord[]> {
     try {
-      // Use public data-api for wallet trades (no auth required)
+      // Use public data-api for wallet trades (no auth required) - high limit for full history
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.dataUrl}/trades`, {
-          params: { proxyWallet: address, limit: 200 },
-          timeout: 15000,
+          params: { proxyWallet: address, limit: 2000 },
+          timeout: 30000,
         })
       );
       const data = response.data || [];
