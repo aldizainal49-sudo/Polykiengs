@@ -43,9 +43,3 @@ declare module 'ethers' {
   }
   export function formatUnits(value: bigint, decimals: number): string;
 }
-
-declare module 'p-limit' {
-  type LimitFunction = <T>(fn: () => Promise<T>) => Promise<T>;
-  function pLimit(concurrency: number): LimitFunction;
-  export default pLimit;
-}

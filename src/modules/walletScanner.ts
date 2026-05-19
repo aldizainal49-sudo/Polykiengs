@@ -4,23 +4,56 @@
 // ============================================================
 
 import axios from 'axios';
-import pLimit from 'p-limit';
 import { config } from '../config';
 import { WalletProfile, TradeRecord, ScanResult, TopTrader, TraderPattern } from '../types';
 import { logger } from '../utils/logger';
 import { Database } from '../utils/database';
 
+/**
+ * Simple concurrency limiter (replaces p-limit which is ESM-only)
+ */
+function createLimiter(concurrency: number) {
+  let active = 0;
+  const queue: (() => void)[] = [];
+
+  return function limit<T>(fn: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const run = async () => {
+        active++;
+        try {
+          const result = await fn();
+          resolve(result);
+        } catch (err) {
+          reject(err);
+        } finally {
+          active--;
+          if (queue.length > 0) {
+            const next = queue.shift();
+            if (next) next();
+          }
+        }
+      };
+
+      if (active < concurrency) {
+        run();
+      } else {
+        queue.push(run);
+      }
+    });
+  };
+}
+
 export class WalletScanner {
   private apiUrl: string;
   private db: Database;
-  private limit: ReturnType<typeof pLimit>;
+  private limit: <T>(fn: () => Promise<T>) => Promise<T>;
   private scannedWallets: Map<string, WalletProfile> = new Map();
 
   constructor(db: Database) {
     this.apiUrl = config.polymarketApiUrl;
     this.db = db;
     // Concurrency limiter: 10 parallel requests (safe for Polymarket rate limits)
-    this.limit = pLimit(10);
+    this.limit = createLimiter(10);
   }
 
   /**
