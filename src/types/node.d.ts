@@ -38,3 +38,18 @@ declare module 'path' {
   export function dirname(p: string): string;
   export function join(...paths: string[]): string;
 }
+
+declare module 'crypto' {
+  interface Hmac {
+    update(data: string): Hmac;
+    digest(encoding: string): string;
+  }
+  export function createHmac(algorithm: string, key: Buffer): Hmac;
+}
+
+declare function require(module: string): any;
+
+declare class Buffer {
+  static from(data: string, encoding?: string): Buffer;
+  toString(encoding?: string): string;
+}
