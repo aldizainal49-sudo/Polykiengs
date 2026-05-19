@@ -35,10 +35,11 @@ declare module 'ethers' {
     address: string;
     constructor(privateKey: string, provider?: JsonRpcProvider);
     signMessage(message: string): Promise<string>;
+    signTypedData(domain: any, types: any, value: any): Promise<string>;
   }
   export class Contract {
     constructor(address: string, abi: any[], providerOrSigner: any);
-    balanceOf(address: string): Promise<bigint>;
+    [method: string]: any; // Dynamic ABI methods (balanceOf, approve, allowance, etc.)
   }
   export function formatUnits(value: bigint, decimals: number): string;
 }

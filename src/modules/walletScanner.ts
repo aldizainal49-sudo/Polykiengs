@@ -314,9 +314,7 @@ export class WalletScanner {
       entryPrices[Math.floor(entryPrices.length * 0.75)],
     ];
 
-    // Timing pattern
-    const avgTimestamp = trades.reduce((s, t) => s + t.timestamp, 0) / trades.length;
-    const marketEndTimes = trades.map(t => t.timestamp); // Simplified
+    // Timing pattern (based on entry prices relative to resolution)
     const timingPattern = entryPriceRange[1] < 0.7 ? 'early' : entryPriceRange[0] > 0.6 ? 'late' : 'mixed';
 
     // Win rate by category

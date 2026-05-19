@@ -165,14 +165,18 @@ export class TradeCopier {
 
   /**
    * Generate authentication headers for Polymarket CLOB API
+   * Uses proper HMAC-SHA256 signing with the API secret
    */
   private generateAuthHeaders(method: string, path: string, body: string = ''): Record<string, string> {
+    const crypto = require('crypto');
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const message = timestamp + method.toUpperCase() + path + body;
     
-    // HMAC signature using API secret (simplified - real implementation uses crypto.createHmac)
-    // In production, use: crypto.createHmac('sha256', Buffer.from(this.apiSecret, 'base64')).update(message).digest('base64')
-    const hmacSignature = Buffer.from(message).toString('base64').slice(0, 64);
+    // HMAC-SHA256 signature using API secret (proper cryptographic signing)
+    const hmacSignature = crypto
+      .createHmac('sha256', Buffer.from(this.apiSecret, 'base64'))
+      .update(message)
+      .digest('base64');
 
     return {
       'POLY_ADDRESS': this.wallet.address,
@@ -447,7 +451,7 @@ export class TradeCopier {
         tokenID: bet.market, // Condition token ID
         price: bet.marketPrice.toFixed(2),
         size: bet.recommendedSize.toFixed(2),
-        side: bet.side === 'YES' ? 'BUY' : 'BUY', // BUY YES or BUY NO
+        side: 'BUY', // Always BUY (tokenID determines YES/NO outcome)
         feeRateBps: '0',
         nonce: Date.now().toString(),
         expiration: '0', // No expiration (GTC)

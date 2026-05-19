@@ -22,7 +22,7 @@ export class Database {
   private storePath: string;
   private store: DatabaseStore;
 
-  constructor(dbPath: string = './data/polykiengs.json') {
+  constructor(dbPath: string = './data/polykiengs.db') {
     this.storePath = dbPath;
     this.store = this.loadFromDisk();
     logger.info('📦 Database initialized');
