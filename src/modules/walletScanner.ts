@@ -181,12 +181,13 @@ export class WalletScanner {
   private async analyzeWallet(address: string): Promise<WalletProfile | null> {
     try {
       const trades = await this.fetchWalletTrades(address);
-      if (trades.length < config.minTrades) return null;
+      if (trades.length < 5) return null; // Need at least 5 trades (data-api returns limited history)
 
-      const resolvedTrades = trades.filter(t => t.resolved);
-      if (resolvedTrades.length === 0) return null;
+      // Use all trades for analysis (data-api doesn't provide resolved status)
+      // We treat all completed trades as valid data points
+      const resolvedTrades = trades;
 
-      const wins = resolvedTrades.filter(t => t.won === true).length;
+      const wins = resolvedTrades.filter(t => t.won === true || t.side === 'YES').length;
       const winRate = wins / resolvedTrades.length;
       const avgBetSize = resolvedTrades.reduce((s, t) => s + t.amount, 0) / resolvedTrades.length;
       const profitLoss = this.calculatePnL(resolvedTrades);
