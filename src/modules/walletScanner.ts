@@ -495,25 +495,45 @@ export class WalletScanner {
         })
       );
       const markets = response.data || [];
-      // Extract condition_id (token IDs) for trading via CLOB
-      return markets
-        .map((m: any) => m.condition_id || m.clobTokenIds?.[0] || m.id)
-        .filter(Boolean);
+      // Extract ALL clob token IDs (each market has YES and NO token)
+      const tokenIds: string[] = [];
+      for (const m of markets) {
+        if (m.clobTokenIds) {
+          // clobTokenIds is a JSON string like '["tokenId1","tokenId2"]' or an array
+          try {
+            const ids = typeof m.clobTokenIds === 'string' 
+              ? JSON.parse(m.clobTokenIds) 
+              : m.clobTokenIds;
+            if (Array.isArray(ids)) {
+              tokenIds.push(...ids);
+            }
+          } catch {
+            // If parsing fails, try as single value
+            if (m.clobTokenIds) tokenIds.push(m.clobTokenIds);
+          }
+        } else if (m.condition_id) {
+          tokenIds.push(m.condition_id);
+        }
+      }
+      logger.info(`  Extracted ${tokenIds.length} token IDs from ${markets.length} markets`);
+      return tokenIds.filter(Boolean);
     } catch (error) {
       logger.warn('Failed to fetch markets from Gamma API, using cached data');
       return this.db.getCachedMarketIds();
     }
   }
 
-  private async fetchMarketTraders(marketId: string): Promise<string[]> {
+  private async fetchMarketTraders(tokenId: string): Promise<string[]> {
     try {
+      // CLOB API uses asset_id (token_id) to query trades
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.apiUrl}/trades`, {
-          params: { market: marketId, limit: 500 },
+          params: { asset_id: tokenId, limit: 100 },
           timeout: 15000,
         })
       );
-      return response.data.map((t: any) => t.maker || t.taker).filter(Boolean);
+      const trades = response.data || [];
+      return trades.map((t: any) => t.maker_address || t.maker || t.taker).filter(Boolean);
     } catch {
       return [];
     }
@@ -543,22 +563,23 @@ export class WalletScanner {
     try {
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.apiUrl}/trades`, {
-          params: { maker: address, limit: 200 },
+          params: { maker_address: address, limit: 200 },
           timeout: 15000,
         })
       );
-      return response.data.map((t: any) => ({
-        id: t.id || `${address}-${t.timestamp}`,
+      const data = response.data || [];
+      return data.map((t: any) => ({
+        id: t.id || `${address}-${t.match_time || t.timestamp}`,
         wallet: address,
-        market: t.market || t.condition_id,
+        market: t.asset_id || t.market || t.condition_id || '',
         marketSlug: t.market_slug || '',
-        outcome: t.outcome || '',
+        outcome: t.outcome || t.side || '',
         side: t.side === 'BUY' ? 'YES' : 'NO',
         amount: parseFloat(t.size || t.amount || '0'),
         price: parseFloat(t.price || '0.5'),
-        timestamp: new Date(t.timestamp || t.created_at).getTime(),
-        resolved: t.resolved || false,
-        won: t.won ?? null,
+        timestamp: t.match_time ? new Date(t.match_time).getTime() : (t.timestamp ? new Date(t.timestamp).getTime() : Date.now()),
+        resolved: false,
+        won: null,
       }));
     } catch {
       return [];
