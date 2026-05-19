@@ -531,7 +531,7 @@ export class WalletScanner {
       // Use public data-api for trades (no auth required) - high limit for more wallets
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.dataUrl}/trades`, {
-          params: { asset_id: tokenId, limit: 5000 },
+          params: { asset_id: tokenId, limit: 12000 },
           timeout: 30000,
         })
       );
@@ -567,7 +567,7 @@ export class WalletScanner {
       // Use public data-api for wallet trades (no auth required) - high limit for full history
       const response = await this.retryWithBackoff(() =>
         axios.get(`${this.dataUrl}/trades`, {
-          params: { proxyWallet: address, limit: 5000 },
+          params: { proxyWallet: address, limit: 12000 },
           timeout: 30000,
         })
       );
