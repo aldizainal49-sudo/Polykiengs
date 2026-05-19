@@ -292,21 +292,22 @@ export class WalletScanner {
     // Require z-score > 1.28 (80% confidence) - relaxed for limited/proxy data
     const isStatisticallySignificant = zScore > 1.28;
     
-    // Additional checks:
+    // Additional checks using side=YES as proxy for wins (won is always null from data-api):
     // 1. Consistency across time periods
     const halfPoint = Math.floor(trades.length / 2);
-    const firstHalf = trades.slice(0, halfPoint).filter(t => t.won === true).length / halfPoint;
-    const secondHalf = trades.slice(halfPoint).filter(t => t.won === true).length / (trades.length - halfPoint);
-    const isConsistentAcrossTime = Math.abs(firstHalf - secondHalf) < 0.15;
+    const firstHalf = trades.slice(0, halfPoint).filter(t => t.won === true || t.side === 'YES').length / halfPoint;
+    const secondHalf = trades.slice(halfPoint).filter(t => t.won === true || t.side === 'YES').length / (trades.length - halfPoint);
+    const isConsistentAcrossTime = Math.abs(firstHalf - secondHalf) < 0.20;
     
-    // 2. Diverse market success (not just lucky in one market)
-    const marketWins = new Map<string, number>();
-    trades.filter(t => t.won).forEach(t => {
-      marketWins.set(t.market, (marketWins.get(t.market) || 0) + 1);
+    // 2. Diverse market activity (trades across multiple markets = more reliable signal)
+    const marketActivity = new Map<string, number>();
+    trades.filter(t => t.won === true || t.side === 'YES').forEach(t => {
+      marketActivity.set(t.market, (marketActivity.get(t.market) || 0) + 1);
     });
-    const isDiverse = marketWins.size >= 2;
+    const isDiverse = marketActivity.size >= 2;
 
-    return isStatisticallySignificant && (isConsistentAcrossTime || isDiverse);
+    // Pass if statistically significant OR if diverse + high volume
+    return isStatisticallySignificant || (isDiverse && n >= 15);
   }
 
   /**
