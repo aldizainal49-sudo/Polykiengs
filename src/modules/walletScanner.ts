@@ -230,15 +230,14 @@ export class WalletScanner {
 
   /**
    * Filter for quality traders based on minimum criteria
+   * Relaxed filters since data-api doesn't provide resolved/won status
    */
   private filterQualityTraders(profiles: WalletProfile[]): WalletProfile[] {
     return profiles
       .filter(p => 
-        p.winRate >= config.minWinRate &&
-        p.totalTrades >= config.minTrades &&
-        p.profitLoss > 0 &&
-        p.consistency > 0.3 &&
-        p.lastActive > Date.now() - (7 * 24 * 60 * 60 * 1000) // Active in last week
+        p.winRate >= 0.45 && // Relaxed: data-api uses side=YES as proxy for wins
+        p.totalTrades >= 10 && // Relaxed: many wallets have limited visible history
+        p.lastActive > Date.now() - (30 * 24 * 60 * 60 * 1000) // Active in last 30 days
       )
       .sort((a, b) => b.edgeScore - a.edgeScore);
   }
@@ -290,8 +289,8 @@ export class WalletScanner {
     const se = Math.sqrt((expected * (1 - expected)) / n);
     const zScore = (observed - expected) / se;
     
-    // Require z-score > 1.65 (90% confidence) - relaxed for limited data
-    const isStatisticallySignificant = zScore > 1.65;
+    // Require z-score > 1.28 (80% confidence) - relaxed for limited/proxy data
+    const isStatisticallySignificant = zScore > 1.28;
     
     // Additional checks:
     // 1. Consistency across time periods
